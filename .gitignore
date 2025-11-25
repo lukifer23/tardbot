@@ -39,9 +39,8 @@ checkpoints/
 *.pth
 *.ckpt
 
-# Allow latest checkpoint for LFS
-!latest.pt
-!checkpoints/*/latest.pt
+# Note: Checkpoints are too large for free LFS quota
+# Consider GitHub Pro or alternative storage for model weights
 
 # Logs
 logs/
