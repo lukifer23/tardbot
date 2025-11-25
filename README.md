@@ -1,16 +1,36 @@
 # TardBot
 
-A small language model (SLM) with Mixture of Experts (MoE) architecture, tool calling capabilities, and chain-of-thought reasoning. Designed to run and train entirely on-device on an M3 Pro MacBook Pro with 18GB RAM (CPU/MPS only—no CUDA dependencies required).
+A small language model (SLM) with Mixture of Experts (MoE) architecture, tool calling capabilities, and chain-of-thought reasoning. Designed for on-device training and inference on Apple Silicon Macs with 18GB RAM (CPU/MPS only - no CUDA dependencies).
+
+## About
+
+TardBot is an open-source implementation of a modern language model featuring:
+- Mixture of Experts routing with load balancing
+- Tool calling with JSON schema validation
+- Chain-of-thought reasoning capabilities
+- Efficient attention mechanisms for long contexts
+- Complete training pipeline optimized for consumer hardware
+
+The project emphasizes practical AI development: models that can be trained and deployed entirely on personal devices without cloud dependencies.
 
 ## Features
 
-- **MoE/Dense Presets**: Configurable options from `dense_175m` (~175M dense transformer) and `mac_nano` (~180M) up to `expert_200m` (~200M per expert × 8 experts), with `expert_75m` as a mid-point for sequential expert training
-- **Dynamic Expert Loading**: Train 100M+ parameter experts individually to fit in memory
-- **Long Context**: 4096 token context window with cached sliding window attention
-- **Tool Calling**: JSON schema-based tool execution (search, Python, browser)
-- **Chain-of-Thought**: Step-by-step reasoning capabilities
-- **Efficient Inference**: fp16 (MPS) or dynamic int8 (CPU) quantization paths for fast inference
-- **Modern Techniques**: RoPE, RMSNorm, SwiGLU, gradient checkpointing
+### Model Architecture
+- **Mixture of Experts**: Configurable routing with load balancing and dynamic expert loading
+- **Modern Components**: RoPE positioning, RMSNorm, SwiGLU activation, sliding window attention
+- **Scalable Presets**: From 25M parameters to 200M+ per expert, designed for consumer hardware
+
+### Capabilities
+- **Long Context**: 4096 token context window with efficient attention mechanisms
+- **Tool Calling**: JSON schema-based execution (web search, Python code, browser automation)
+- **Chain-of-Thought**: Step-by-step reasoning for complex tasks
+- **Quantization**: Multiple precision modes for different performance requirements
+
+### Training & Inference
+- **On-Device Training**: Complete pipeline optimized for Apple Silicon (MPS)
+- **Efficient Inference**: fp16 MPS or int8 CPU quantization
+- **Memory Optimization**: Gradient checkpointing, dynamic loading for large models
+- **Multi-Dataset Support**: FineWeb, GitHub, StackExchange, Wikipedia corpora
 
 ## Architecture
 
@@ -21,9 +41,28 @@ A small language model (SLM) with Mixture of Experts (MoE) architecture, tool ca
 - **Attention**: Sliding window attention for efficient long context
 - **Expert Routing**: Top-2 routing with load balancing
 
-## Installation
+## Requirements
+
+- **Hardware**: Apple Silicon Mac (M1/M2/M3) with 16GB+ RAM recommended
+- **OS**: macOS 13.0+
+- **Python**: 3.9+
+
+### Dependencies
 
 ```bash
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+pip install transformers datasets tokenizers accelerate
+pip install numpy scipy scikit-learn
+pip install tqdm wandb tensorboard
+pip install requests aiohttp beautifulsoup4
+pip install jupyter ipython
+```
+
+### Installation
+
+```bash
+git clone https://github.com/lukifer23/tardbot.git
+cd tardbot
 pip install -e .
 ```
 
@@ -179,9 +218,35 @@ python scripts/check_preset.py --preset mac_mini --batch-size 1 --seq-len 4096
 
 See `docs/architecture.md` for detailed architecture documentation.
 
+## Current Status
+
+Active development with ongoing pre-training:
+
+- **Model**: Dense 25M parameter transformer (26.6M total)
+- **Context**: 2048 tokens
+- **Training Progress**: ~26,000 steps completed
+- **Current Loss**: 8.68 (perplexity: ~17,840)
+- **Hardware**: Apple M3 Pro, 18GB RAM, MPS acceleration
+- **Dataset**: 1.77B tokens from multi-source corpora
+
+### Performance Notes
+
+- Training speed: ~0.15 steps/second on M3 Pro
+- Memory usage: ~3.3GB/9.7GB GPU memory during training
+- Active experimentation with learning rate optimization
+
+## Contributing
+
+Contributions welcome! Please:
+
+1. Fork the repository
+2. Create a feature branch
+3. Submit a pull request with clear description
+4. Ensure tests pass and code is documented
+
 ## License
 
-MIT
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 # Basic dense 75M run (fast baseline)
 
 ```bash
