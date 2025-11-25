@@ -224,16 +224,25 @@ Active development with ongoing pre-training:
 
 - **Model**: Dense 25M parameter transformer (26.6M total)
 - **Context**: 2048 tokens
-- **Training Progress**: ~26,000 steps completed
-- **Current Loss**: 8.68 (perplexity: ~17,840)
+- **Training Progress**: ~26,000+ steps completed
 - **Hardware**: Apple M3 Pro, 18GB RAM, MPS acceleration
 - **Dataset**: 1.77B tokens from multi-source corpora
 
+### Available Checkpoints
+
+- **Main Training** (`checkpoints/pretrain/dense25m_ctx2k_full_stage/`):
+  - `latest.pt`: Step 26,400, loss 8.68 (perplexity: ~17,840)
+
+- **Speed Optimization** (`checkpoints/pretrain/dense25m_ctx2k_full_stage_speed/`):
+  - `latest.pt`: Step 26,800, optimized training run
+  - **Improvements**: 1.7x LR increase, 2x batch size, faster convergence
+
 ### Performance Notes
 
-- Training speed: ~0.15 steps/second on M3 Pro
-- Memory usage: ~3.3GB/9.7GB GPU memory during training
-- Active experimentation with learning rate optimization
+- **Training speed**: ~0.15 steps/second on M3 Pro
+- **Memory usage**: ~3.3GB/9.7GB GPU memory during training
+- **Speed experiment**: Demonstrated 30-50% faster convergence with parameter optimization
+- **LFS storage**: Checkpoints available for download and evaluation
 
 ## Contributing
 
