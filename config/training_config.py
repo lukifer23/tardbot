@@ -30,6 +30,7 @@ class TrainingConfig:
     gradient_checkpointing: bool = True
     use_torch_compile: bool = False
     gradient_checkpointing_kwargs: Optional[dict] = None
+    empty_cache_steps: Optional[int] = None  # Empty cache every N steps to reduce fragmentation
     dataloader_num_workers: int = 4
     dataloader_pin_memory: bool = True
     report_to: str = "tensorboard"

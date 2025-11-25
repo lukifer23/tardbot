@@ -33,8 +33,8 @@ def load_instruct_data(data_config: DataConfig) -> list:
 def main():
     parser = argparse.ArgumentParser(description="Fine-tune TardBot for instruction following")
     parser.add_argument("--checkpoint", type=str, required=True, help="Path to pretrained checkpoint")
-parser.add_argument("--output_dir", type=str, default="checkpoints/instruct", help="Output directory")
-parser.add_argument("--dataset-limit", type=int, default=None, help="Optional limit on instruction examples")
+    parser.add_argument("--output_dir", type=str, default="checkpoints/instruct", help="Output directory")
+    parser.add_argument("--dataset-limit", type=int, default=None, help="Optional limit on instruction examples")
     args = parser.parse_args()
     
     setup_logging()

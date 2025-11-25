@@ -31,6 +31,7 @@ def main():
     parser.add_argument("--output", default="checkpoints/tokenizer", help="Directory to store tokenizer artifacts")
     parser.add_argument("--files", nargs="*", help="Optional glob(s) of raw text files")
     parser.add_argument("--vocab-size", type=int, default=32000, help="Target vocabulary size before padding")
+    parser.add_argument("--force", action="store_true", help="Overwrite an existing tokenizer at the output path")
     args = parser.parse_args()
 
     setup_logging()
@@ -46,6 +47,10 @@ def main():
     output_dir = Path(args.output)
     output_dir.mkdir(parents=True, exist_ok=True)
     tokenizer_path = output_dir / "tokenizer.json"
+
+    if tokenizer_path.exists() and not args.force:
+        logger.info("Tokenizer already exists at %s; use --force to retrain/overwrite.", tokenizer_path)
+        return
 
     logger.info("Training tokenizer on %d files (vocab=%d)", len(training_files), args.vocab_size)
     tokenizer = TardBotTokenizer(vocab_size=args.vocab_size)

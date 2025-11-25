@@ -7,7 +7,7 @@ setup(
     author="TardBot Team",
     packages=find_packages(where="src"),
     package_dir={"": "src"},
-    python_requires=">=3.10",
+    python_requires=">=3.9",
     install_requires=[
         "torch>=2.1.0",
         "transformers>=4.35.0",

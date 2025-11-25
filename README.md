@@ -124,7 +124,7 @@ python scripts/pretrain.py \
 
 ### Sequential Expert Training
 
-For large per-expert models (e.g., `expert_75m`, `expert_100m`) run one expert at a time and save its weights:
+For large per-expert models (e.g., `expert_75m`, `expert_100m` sized to ~80M params/expert to fit 18 GB) run one expert at a time and save its weights:
 
 ```bash
 python scripts/pretrain.py \
@@ -207,7 +207,7 @@ expert_200m = ModelConfig.from_preset("expert_200m")
 print(expert_100m.describe(batch_size=1, seq_len=4096))
 ```
 
-**Memory Optimization**: Large expert presets use dynamic loading to train 100M+ parameter experts individually, keeping GPU memory under 18GB.
+**Memory Optimization**: Large expert presets use dynamic loading to train 80–100M parameter experts individually, keeping GPU memory under 18GB.
 Each preset reports per-expert parameter count, router size, memory estimates for the supplied batch/sequence length, and whether the configuration fits inside the 18 GB M3 Pro RAM budget. You can also run the helper CLI to quickly check multiple presets:
 
 ```bash

@@ -32,9 +32,6 @@ class Trainer:
         optimizer: Optional[torch.optim.Optimizer] = None,
         lr_scheduler: Optional[Any] = None,
     ):
-        if getattr(config, "use_torch_compile", False) and hasattr(torch, "compile"):
-            model = torch.compile(model)  # type: ignore[attr-defined]
-
         self.model = model
         self.train_dataloader = train_dataloader
         self.eval_dataloader = eval_dataloader
@@ -72,8 +69,14 @@ class Trainer:
                 self.metrics_tracker.update({"loss": last_loss})
             if self.global_step > 0:
                 logger.info("Restoring scheduler to step %d", self.global_step)
-                for _ in range(self.global_step):
-                    self.lr_scheduler.step()
+                # Set scheduler step count directly instead of calling step() multiple times
+                # to avoid "step before optimizer.step()" warning
+                if hasattr(self.lr_scheduler, '_step_count'):
+                    self.lr_scheduler._step_count = self.global_step
+
+        # Apply torch.compile only after checkpoint restore to avoid state_dict key mismatches.
+        if getattr(self.config, "use_torch_compile", False) and hasattr(torch, "compile"):
+            self.model = torch.compile(self.model)  # type: ignore[attr-defined]
 
     def _get_lr_scheduler(self):
         num_training_steps = len(self.train_dataloader) * self.config.num_train_epochs
@@ -175,6 +178,13 @@ class Trainer:
                     total_loss = 0.0
                     step_start_time = time.time()
                 
+                # Periodic cache clearing to reduce memory fragmentation
+                if self.config.empty_cache_steps and self.global_step % self.config.empty_cache_steps == 0:
+                    if torch.cuda.is_available():
+                        torch.cuda.empty_cache()
+                    elif hasattr(torch.mps, 'empty_cache'):
+                        torch.mps.empty_cache()
+
                 if self.global_step % self.config.save_steps == 0:
                     self._save_checkpoint()
                 

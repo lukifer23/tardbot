@@ -92,7 +92,7 @@ You can still fine-tune defaults by editing `config/training_config.py`; the CLI
 
 ### Sequential Expert Runs
 
-For presets such as `expert_75m` or `expert_100m`, run one expert at a time with the `--active-expert` flag and point `--expert-checkpoint-dir` to a persistent location:
+For presets such as `expert_75m` or `expert_100m` (now ~80M params/expert to stay under 18 GB), run one expert at a time with the `--active-expert` flag and point `--expert-checkpoint-dir` to a persistent location:
 
 ```bash
 python scripts/pretrain.py \

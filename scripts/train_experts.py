@@ -10,6 +10,7 @@ from pathlib import Path
 import sys
 import time
 from tqdm import tqdm
+from typing import Dict, List, Tuple, Optional
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -24,6 +25,75 @@ from src.training.trainer import Trainer
 from src.training.optimizer import get_optimizer
 from src.utils.logging import setup_logging, get_logger
 from src.utils.system import get_preferred_device
+from src.data.shards import load_shard_manifest
+
+
+def _parse_dataset_limit(spec: Optional[str]) -> Optional[Dict[str, int]]:
+    if not spec:
+        return None
+    result: Dict[str, int] = {}
+    for part in spec.split(","):
+        if "=" not in part:
+            continue
+        name, value = part.split("=", 1)
+        name = name.strip()
+        try:
+            count = int(value)
+        except ValueError:
+            continue
+        if name:
+            result[name] = count
+    return result or None
+
+
+def _collect_tokenized_files(processed_dir: Path, dataset_limit: Optional[Dict[str, int]]) -> Tuple[List[str], Dict[str, Dict[str, float]]]:
+    shard_records, summary = load_shard_manifest(processed_dir)
+    if not shard_records:
+        raise FileNotFoundError(f"No processed shards found under {processed_dir}. Run download_corpus.py --process first.")
+
+    per_dataset_counts: Dict[str, int] = {}
+    filtered_summary: Dict[str, Dict[str, float]] = {}
+    selected: List[str] = []
+
+    for info in shard_records:
+        limit = dataset_limit.get(info.dataset) if dataset_limit else None
+        count = per_dataset_counts.get(info.dataset, 0)
+        if limit is not None and count >= limit:
+            continue
+
+        selected.append(str(info.path))
+        per_dataset_counts[info.dataset] = count + 1
+
+        stats = filtered_summary.setdefault(
+            info.dataset,
+            {"shards": 0, "sequences": 0.0, "tokens": 0.0},
+        )
+        stats["shards"] += 1
+        stats["sequences"] += info.num_sequences
+        stats["tokens"] += info.total_tokens
+
+    if not filtered_summary:
+        filtered_summary = summary
+
+    return selected, filtered_summary
+
+
+def _load_shared_weights(model: TardBotForCausalLM, shared_path: Path, device: torch.device):
+    if not shared_path.exists():
+        return
+    state = torch.load(shared_path, map_location=device)
+    state_dict = state.get("model_state_dict", state)
+    filtered = {k: v for k, v in state_dict.items() if "single_expert" not in k}
+    missing, unexpected = model.load_state_dict(filtered, strict=False)
+    if missing:
+        get_logger(__name__).warning("Shared checkpoint missing %d keys (ignored): %s", len(missing), ", ".join(missing[:3]))
+    if unexpected:
+        get_logger(__name__).warning("Shared checkpoint had %d unexpected keys (ignored): %s", len(unexpected), ", ".join(unexpected[:3]))
+
+
+def _save_shared_weights(model: TardBotForCausalLM, shared_path: Path):
+    shared_path.parent.mkdir(parents=True, exist_ok=True)
+    torch.save({"model_state_dict": model.state_dict()}, shared_path)
 
 
 def train_single_expert(
@@ -172,24 +242,46 @@ def load_expert_checkpoint(
 
 def main():
     parser = argparse.ArgumentParser(description="Train MoE experts with dynamic loading")
-    parser.add_argument("--config", type=str, help="Path to config file")
+    parser.add_argument("--preset", type=str, default="expert_75m", help="Model preset to use for expert training")
     parser.add_argument("--experts", type=str, help="Comma-separated list of expert indices to train (e.g., '0,2,4')")
     parser.add_argument("--resume", action="store_true", help="Resume from latest checkpoints")
+    parser.add_argument("--tokenizer", type=Path, default=Path("checkpoints/tokenizer"), help="Tokenizer directory")
+    parser.add_argument("--processed-dir", type=Path, default=Path("data/processed/pretrain"), help="Processed shard root")
+    parser.add_argument("--dataset-limit", type=str, help="Optional per-dataset shard limits, e.g. fineweb=200,wikipedia=200")
+    parser.add_argument("--batch-size", type=int, default=1, help="Per-device batch size")
+    parser.add_argument("--grad-accum", type=int, default=16, help="Gradient accumulation steps")
+    parser.add_argument("--learning-rate", type=float, default=6e-4, help="Learning rate")
+    parser.add_argument("--max-steps", type=int, default=-1, help="Max training steps (<=0 disables)")
+    parser.add_argument("--seq-len", type=int, default=4096, help="Sequence length")
+    parser.add_argument("--run-name", type=str, default="expert_runs", help="Checkpoint run name")
+    parser.add_argument("--output-dir", type=Path, default=Path("checkpoints/pretrain"), help="Base output directory for shared checkpoints")
+    parser.add_argument("--save-steps", type=int, default=500, help="Checkpoint save interval")
+    parser.add_argument("--save-total-limit", type=int, default=3, help="How many checkpoints to keep")
+    parser.add_argument("--eval-steps", type=int, default=500, help="Validation interval")
     args = parser.parse_args()
 
     setup_logging()
     logger = get_logger(__name__)
 
-    # Load configurations
-    model_config = ModelConfig.from_preset("expert_100m")
-    model_config.expert_checkpoint_dir = "checkpoints/experts"
-    model_config.max_experts_in_memory = 1  # Only train one expert at a time
+    dataset_limit = _parse_dataset_limit(args.dataset_limit)
+
+    model_config = ModelConfig.from_preset(args.preset)
+    model_config.expert_checkpoint_dir = str(Path("checkpoints/experts"))
+    model_config.max_experts_in_memory = 1
+    model_config.max_position_embeddings = args.seq_len
 
     training_config = TrainingConfig()
-    training_config.per_device_train_batch_size = 1
-    training_config.gradient_accumulation_steps = 16
+    training_config.per_device_train_batch_size = args.batch_size
+    training_config.gradient_accumulation_steps = args.grad_accum
+    training_config.learning_rate = args.learning_rate
     training_config.num_train_epochs = 1
-    training_config.max_steps = 1000  # Limit for testing
+    training_config.max_steps = args.max_steps
+    training_config.max_seq_length = args.seq_len
+    training_config.save_steps = args.save_steps
+    training_config.save_total_limit = args.save_total_limit
+    training_config.eval_steps = args.eval_steps
+    training_config.output_dir = str(args.output_dir)
+    training_config.run_name = args.run_name
 
     data_config = DataConfig()
 
@@ -206,32 +298,40 @@ def main():
     logger.info(f"Using device: {device}")
 
     # Load tokenizer
-    tokenizer_path = Path("checkpoints/tokenizer")
-    if tokenizer_path.exists():
-        tokenizer = TardBotTokenizer(tokenizer_path=str(tokenizer_path))
-    else:
-        logger.error("Tokenizer not found. Please train tokenizer first.")
+    if not args.tokenizer.exists():
+        logger.error("Tokenizer not found at %s. Train tokenizer first.", args.tokenizer)
         return
+    tokenizer = TardBotTokenizer(tokenizer_path=str(args.tokenizer))
 
-    # Setup data
-    from config.data_config import DataConfig
-    data_config = DataConfig()
-    raw_dir = Path(data_config.raw_data_dir)
-    files = sorted(list(raw_dir.glob("*.txt")))
-
-    if not files:
-        logger.error("No training data found")
-        return
+    # Setup data from processed shards
+    processed_dir = args.processed_dir
+    files, summary = _collect_tokenized_files(processed_dir, dataset_limit)
+    total_sequences = int(sum(stats.get("sequences", 0) for stats in summary.values()))
+    logger.info(
+        "Using %d tokenized shard(s) (%s sequences total)",
+        len(files),
+        f"{total_sequences}" if total_sequences else "unknown",
+    )
 
     # Create datasets
     train_dataset = StreamingPretrainDataset(
-        [str(f) for f in files], tokenizer, max_length=model_config.max_position_embeddings,
-        split="train", val_ratio=data_config.val_split, seed=training_config.seed
+        files,
+        tokenizer,
+        max_length=model_config.max_position_embeddings,
+        split="train",
+        val_ratio=data_config.val_split,
+        seed=training_config.seed,
+        total_sequences=total_sequences,
     )
 
     val_dataset = StreamingPretrainDataset(
-        [str(f) for f in files], tokenizer, max_length=model_config.max_position_embeddings,
-        split="val", val_ratio=data_config.val_split, seed=training_config.seed
+        files,
+        tokenizer,
+        max_length=model_config.max_position_embeddings,
+        split="val",
+        val_ratio=data_config.val_split,
+        seed=training_config.seed,
+        total_sequences=total_sequences,
     )
 
     # Create dataloaders
@@ -248,8 +348,10 @@ def main():
     )
 
     # Create model
-    model = TardBotForCausalLM(model_config)
-    model.to(device)
+    model = TardBotForCausalLM(model_config).to(device)
+
+    # Shared checkpoint path reused across experts (shared transformer/router)
+    shared_ckpt_path = args.output_dir / args.run_name / "shared_latest.pt"
 
     # Create checkpoint directory
     checkpoint_dir = Path(model_config.expert_checkpoint_dir)
@@ -260,6 +362,13 @@ def main():
 
     for expert_idx in expert_indices:
         logger.info(f"Starting training for expert {expert_idx}")
+
+        # Update active expert and rebuild module to bind correct expert slot
+        model_config.active_expert = expert_idx
+        model = TardBotForCausalLM(model_config).to(device)
+
+        # Warm start shared weights if available
+        _load_shared_weights(model, shared_ckpt_path, device)
 
         # Load checkpoint if resuming
         if args.resume:
@@ -278,6 +387,7 @@ def main():
         # Save expert checkpoints
         model.save_expert_checkpoints()
         logger.info(f"Expert {expert_idx} training completed with loss: {final_loss:.4f}")
+        _save_shared_weights(model, shared_ckpt_path)
 
     logger.info("All expert training completed!")
     logger.info(f"Expert losses: {expert_losses}")

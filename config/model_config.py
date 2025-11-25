@@ -100,7 +100,7 @@ MODEL_PRESETS: Dict[str, Dict[str, Any]] = {
         "attention_stride": 256,
         "num_experts": 1,
     },
-    "dense_25m": {
+    "dense_25m": {  # Actually ~26.6M parameters
         "vocab_size": 32000,
         "hidden_size": 320,
         "intermediate_size": 1280,
@@ -139,7 +139,7 @@ MODEL_PRESETS: Dict[str, Dict[str, Any]] = {
     "expert_100m": {
         "vocab_size": 32000,
         "hidden_size": 1024,
-        "intermediate_size": 52224,  # For ~100M params per expert: 3 * 1024 * 52224 ≈ 100M
+        "intermediate_size": 26214,  # ~80M params per expert, sized to fit 18GB with single cached expert
         "num_hidden_layers": 16,
         "num_attention_heads": 16,
         "num_key_value_heads": 8,
@@ -209,7 +209,7 @@ class ModelConfig:
 
     # Dynamic expert loading parameters
     expert_checkpoint_dir: Optional[str] = None
-    max_experts_in_memory: int = 2
+    max_experts_in_memory: int = 1
     active_expert: Optional[int] = None
 
     def __post_init__(self):
@@ -260,18 +260,25 @@ class ModelConfig:
         )
         total_attn_params = self.num_hidden_layers * attn_params_per_layer
 
-        # MLP parameters (Dense and MoE)
-        num_dense_layers = self.num_hidden_layers // 4  # First 1/4 layers are dense
-        num_moe_layers = self.num_hidden_layers - num_dense_layers
+        # MLP parameters (Dense or MoE)
+        if self.num_experts == 1:
+            # Fully dense model
+            total_mlp_params = self.num_hidden_layers * self._swi_glu_params()
+            router_params = 0
+        else:
+            # Hybrid dense/MoE model
+            num_dense_layers = self.num_hidden_layers // 4  # First 1/4 layers are dense
+            num_moe_layers = self.num_hidden_layers - num_dense_layers
 
-        dense_mlp_params = self._swi_glu_params()
-        total_dense_mlp_params = num_dense_layers * dense_mlp_params
+            dense_mlp_params = self._swi_glu_params()
+            total_dense_mlp_params = num_dense_layers * dense_mlp_params
 
-        # MoE: each expert has same params as dense MLP, plus router
-        expert_params = dense_mlp_params
-        router_params = self.router_parameter_count()
-        moe_mlp_params = (self.num_experts * expert_params) + router_params
-        total_moe_mlp_params = num_moe_layers * moe_mlp_params
+            # MoE: each expert has same params as dense MLP, plus router
+            expert_params = dense_mlp_params
+            router_params = self.router_parameter_count()
+            moe_mlp_params = (self.num_experts * expert_params) + router_params
+            total_moe_mlp_params = num_moe_layers * moe_mlp_params
+            total_mlp_params = total_dense_mlp_params + total_moe_mlp_params
 
         # RMSNorm parameters (weight only, no bias in RMSNorm)
         norm_params = self.num_hidden_layers * 2 * self.hidden_size + self.hidden_size  # input + post-attn per layer + final
@@ -282,8 +289,7 @@ class ModelConfig:
         total_params = (
             embed_params +
             total_attn_params +
-            total_dense_mlp_params +
-            total_moe_mlp_params +
+            total_mlp_params +
             norm_params +
             lm_head_params
         )

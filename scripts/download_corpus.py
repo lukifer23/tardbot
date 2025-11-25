@@ -17,6 +17,7 @@ from src.data.preprocessing import preprocess_text
 from src.data.corpus import CorpusProcessor, CorpusProcessingConfig
 from src.data.tokenizer import TardBotTokenizer
 from src.utils.logging import setup_logging, get_logger
+from src.data.shards import summarize_manifest
 
 
 logger = get_logger(__name__)
@@ -157,6 +158,7 @@ def main():
     parser.add_argument("--no-pack", action="store_true", help="Disable sequence packing before padding")
     parser.add_argument("--drop-remainder", action="store_true", help="Drop final partial sequence when packing")
     parser.add_argument("--delete-raw", action="store_true", help="Delete raw text file after successful processing")
+    parser.add_argument("--summarize", action="store_true", help="Print manifest summary after processing")
     args = parser.parse_args()
 
     setup_logging()
@@ -209,6 +211,17 @@ def main():
             logger.info("Saved %d samples (%d processed shards) for %s", count, len(processed_files), name)
         else:
             logger.info("Saved %d samples for %s", count, name)
+
+    if args.process and args.summarize:
+        summary = summarize_manifest(Path(args.processed_output) if args.processed_output else Path(data_config.pretrain_tokenized_dir))
+        total_tokens_g = summary["tokens"] / 1e9 if summary["tokens"] else 0.0
+        logger.info(
+            "Manifest summary: %d shards | %d sequences | %.3fB tokens across %d dataset(s)",
+            summary.get("shards", 0),
+            summary.get("sequences", 0),
+            total_tokens_g,
+            len(summary.get("datasets", {})),
+        )
 
 
 if __name__ == "__main__":

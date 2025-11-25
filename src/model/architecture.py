@@ -227,8 +227,12 @@ class TardBotModel(nn.Module):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-                layer_outputs, router_aux_loss = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
+                # Use a stable wrapper function for torch.compile compatibility
+                def layer_forward(*args, **kwargs):
+                    return decoder_layer(*args, **kwargs)
+
+                layer_outputs, router_aux_loss = torch.utils.checkpoint.checkpoint(
+                    layer_forward,
                     hidden_states,
                     attention_mask,
                     position_ids,
@@ -236,6 +240,7 @@ class TardBotModel(nn.Module):
                     output_attentions,
                     use_cache,
                     router_aux_loss,
+                    use_reentrant=False,
                 )
             else:
                 layer_outputs, router_aux_loss = decoder_layer(
@@ -295,8 +300,6 @@ class TardBotModel(nn.Module):
 
         return attention_mask
 
-    def _gradient_checkpointing_func(self, func, *args, **kwargs):
-        return torch.utils.checkpoint.checkpoint(func, *args, use_reentrant=False, **kwargs)
 
 
 class TardBotForCausalLM(nn.Module):

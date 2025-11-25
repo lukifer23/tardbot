@@ -70,3 +70,15 @@ def load_shard_manifest(root: Path) -> Tuple[List[ShardInfo], Dict[str, Dict[str
 
     return stats, summary
 
+
+def summarize_manifest(root: Path) -> Dict[str, float]:
+    """Return aggregate counts for an existing manifest."""
+    shards, summary = load_shard_manifest(root)
+    total_sequences = sum(info.num_sequences for info in shards)
+    total_tokens = sum(info.total_tokens for info in shards)
+    return {
+        "datasets": summary,
+        "shards": len(shards),
+        "sequences": total_sequences,
+        "tokens": total_tokens,
+    }

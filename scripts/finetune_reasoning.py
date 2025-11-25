@@ -33,8 +33,8 @@ def load_reasoning_data(data_config: DataConfig) -> list:
 def main():
     parser = argparse.ArgumentParser(description="Fine-tune TardBot for reasoning/CoT")
     parser.add_argument("--checkpoint", type=str, required=True, help="Path to tool-tuned checkpoint")
-parser.add_argument("--output_dir", type=str, default="checkpoints/reasoning", help="Output directory")
-parser.add_argument("--dataset-limit", type=int, default=None, help="Optional limit on reasoning examples")
+    parser.add_argument("--output_dir", type=str, default="checkpoints/reasoning", help="Output directory")
+    parser.add_argument("--dataset-limit", type=int, default=None, help="Optional limit on reasoning examples")
     args = parser.parse_args()
     
     setup_logging()

@@ -365,9 +365,9 @@ def parse_args():
     parser.add_argument("--instruct-datasets", nargs="*", help="Override instruction dataset aliases")
     parser.add_argument("--tool-datasets", nargs="*", help="Override tool dataset aliases")
     parser.add_argument("--reasoning-datasets", nargs="*", help="Override reasoning dataset aliases")
-parser.add_argument("--instruct-limit", type=int, default=15000, help="Optional per-dataset limit for instruction data")
-parser.add_argument("--tool-limit", type=int, default=3000, help="Optional per-dataset limit for tool data")
-parser.add_argument("--reasoning-limit", type=int, default=2000, help="Optional per-dataset limit for reasoning data")
+    parser.add_argument("--instruct-limit", type=int, default=15000, help="Optional per-dataset limit for instruction data")
+    parser.add_argument("--tool-limit", type=int, default=3000, help="Optional per-dataset limit for tool data")
+    parser.add_argument("--reasoning-limit", type=int, default=2000, help="Optional per-dataset limit for reasoning data")
     return parser.parse_args()
 
 

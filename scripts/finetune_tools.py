@@ -33,8 +33,8 @@ def load_tool_data(data_config: DataConfig) -> list:
 def main():
     parser = argparse.ArgumentParser(description="Fine-tune TardBot for tool calling")
     parser.add_argument("--checkpoint", type=str, required=True, help="Path to instruction-tuned checkpoint")
-parser.add_argument("--output_dir", type=str, default="checkpoints/tools", help="Output directory")
-parser.add_argument("--dataset-limit", type=int, default=None, help="Optional limit on tool-call examples")
+    parser.add_argument("--output_dir", type=str, default="checkpoints/tools", help="Output directory")
+    parser.add_argument("--dataset-limit", type=int, default=None, help="Optional limit on tool-call examples")
     args = parser.parse_args()
     
     setup_logging()

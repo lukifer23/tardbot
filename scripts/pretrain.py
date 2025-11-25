@@ -201,8 +201,8 @@ def main():
     parser.add_argument("--expert-checkpoint-dir", type=Path, default=Path("checkpoints/experts"), help="Directory to store per-expert checkpoints")
     parser.add_argument("--no-gradient-checkpointing", action="store_true", help="Disable gradient checkpointing")
     parser.add_argument("--torch-compile", action="store_true", help="Enable torch.compile for the model")
-    parser.add_argument("--dataloader-workers", type=int, help="Override dataloader_num_workers")
-    parser.add_argument("--prefetch-factor", type=int, help="Override DataLoader prefetch_factor")
+    parser.add_argument("--dataloader-workers", type=int, default=2, help="Override dataloader_num_workers (default: 2 for better stability)")
+    parser.add_argument("--prefetch-factor", type=int, default=4, help="Override DataLoader prefetch_factor (default: 4 for stability)")
     parser.add_argument("--dataset-limit", type=str, help="Per-dataset shard limits, e.g. fineweb=560,wikipedia=500")
     parser.add_argument("--disable-eval", action="store_true", help="Skip validation during training")
     parser.add_argument("--eval-steps", type=int, help="Override eval interval")
@@ -212,6 +212,7 @@ def main():
     parser.add_argument("--resume-latest", action="store_true", help="Automatically resume from <output-dir>/<run-name>/latest.pt if present")
     parser.add_argument("--lr-stage-boundaries", type=str, help="Comma-separated global step boundaries for staged LR multipliers")
     parser.add_argument("--lr-stage-multipliers", type=str, help="Comma-separated multipliers applied per LR stage (length = boundaries+1)")
+    parser.add_argument("--empty-cache-steps", type=int, help="Empty GPU cache every N steps to reduce fragmentation")
     args = parser.parse_args()
 
     setup_logging()
@@ -281,6 +282,9 @@ def main():
                 f"lr_stage_multipliers expects {expected} values (boundaries + 1), "
                 f"got {len(training_config.lr_stage_multipliers)}"
             )
+
+    if args.empty_cache_steps is not None:
+        training_config.empty_cache_steps = args.empty_cache_steps
 
     _log_memory_report(model_config, training_config)
     if args.active_expert is not None:
@@ -357,6 +361,9 @@ def main():
 
     logger.info("Initializing model on %s", device)
     model = TardBotForCausalLM(model_config).to(device)
+    # Disable KV cache during training to save memory on MPS/CPU
+    if hasattr(model, "config"):
+        model.config.use_cache = False
 
     trainer = Trainer(
         model=model,
