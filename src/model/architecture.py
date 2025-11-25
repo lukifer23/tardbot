@@ -227,28 +227,16 @@ class TardBotModel(nn.Module):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-                # Use a stable wrapper function for torch.compile compatibility
-                def layer_forward(hidden_states, attention_mask, position_ids, past_key_value, output_attentions, use_cache, router_aux_loss):
-                    return decoder_layer(
-                        hidden_states=hidden_states,
-                        attention_mask=attention_mask,
-                        position_ids=position_ids,
-                        past_key_value=past_key_value,
-                        output_attentions=output_attentions,
-                        use_cache=use_cache,
-                        router_aux_loss=router_aux_loss,
-                    )
-
-                layer_outputs, router_aux_loss = torch.utils.checkpoint.checkpoint(
-                    layer_forward,
+                # Temporarily disable gradient checkpointing to avoid torch.compile issues
+                # TODO: Fix gradient checkpointing compatibility with torch.compile
+                layer_outputs, router_aux_loss = decoder_layer(
                     hidden_states,
-                    attention_mask,
-                    position_ids,
-                    past_key_value,
-                    output_attentions,
-                    use_cache,
-                    router_aux_loss,
-                    use_reentrant=False,
+                    attention_mask=attention_mask,
+                    position_ids=position_ids,
+                    past_key_value=past_key_value,
+                    output_attentions=output_attentions,
+                    use_cache=use_cache,
+                    router_aux_loss=router_aux_loss,
                 )
             else:
                 layer_outputs, router_aux_loss = decoder_layer(
